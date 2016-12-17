@@ -7,12 +7,19 @@ import sys
 from pyspark.sql import *
 from pyspark.sql import functions as F
 
+import numpy as np
+from numpy.random import rand
+from numpy import matrix
+# from pyspark.sql import SparkSession
+
 
 # def parseLine(data):
 #     """Parses a urls pair string into urls pair."""
 #     parts = re.split(r'\s+', data)
 #     return parts[0], parts[1]
 
+
+######### HELPER FUNCTIONS #########
 def makeArtistRow(p):
 	if len(p) != 2:
 		return None
@@ -31,6 +38,9 @@ def makeAliasRow(p):
 def p(x):
 	print(x)
 
+def toInt(x):
+	return int(x)
+####################################
 
 class RunRecommender:
 	def __init__(self, sc, sqlContext):
@@ -50,23 +60,29 @@ class RunRecommender:
 		parts = rawUserArtistData.map(lambda l: l.split())
 		userArtists = parts.map(lambda p: Row(user=int(p[0]), artist=int(p[1])))
 		userArtistDF = sqlContext.createDataFrame(userArtists)
-		userArtistDF.show()
+		# userArtistDF.show()
 
 		# NOTE: THE AGG LINE WORKS, BUT TAKES FOREVER (5 min?) TO RUN
 		# userArtistDF.agg(F.min(userArtistDF.user), F.max(userArtistDF.user)).show()
 
 		artistByID = self.buildArtistByID(rawArtistData)
-		artistByID.show()
+		# artistByID.show()
 
 		artistAlias = self.buildArtistAlias(rawArtistAlias)
-		artistAlias.show()
+		# artistAlias.show()
 
-		
+		# Skipping for now:
+		# (badID, goodID) = artistAlias.head()
+		# artistByID.filter(F.col("id").isin(artistAlias.head())).show()
+		# bad = artistByID.where(F.col("id").isin({"artist", "alias"}))
 
-		# print(userArtistDF)
 
 	def model(self, rawUserArtistData, rawArtistData, rawArtistAlias):
 		print("model")
+		# bArtistAlias = sc.broadcast(self.buildArtistAlias(rawArtistAlias))
+		bArtistAlias = self.buildArtistAlias(rawArtistAlias)
+		trainData = self.buildCounts(rawUserArtistData, bArtistAlias).cache()
+		# trainData.show()
 
 	def evaluate(self, rawUserArtistData, rawArtistAlias):
 		print("evaluate")
@@ -93,6 +109,29 @@ class RunRecommender:
 
 		return artistAliasDF
 
+	def buildCounts(self, rawUserArtistData, bArtistAlias):
+		# rawUserArtistData.map { line =>
+		# val Array(userID, artistID, count) = line.split(' ').map(_.toInt)
+		#   val finalArtistID = bArtistAlias.value.getOrElse(artistID, artistID)
+		#   (userID, finalArtistID, count)
+		# }.toDF("user", "artist", "count")
+		
+		# lines = rawUserArtistData.map(lambda l: l.split())
+		# lines.foreach(toInt)
+		# lines.foreach(p)
+		# # finalArtists = bArtistAlias.value
+		# countsDF = sqlContext.createDataFrame(finalArtists)
+		
+		parts = rawUserArtistData.map(lambda l: l.split())
+		userArtists = parts.map(lambda p: Row(user=int(p[0]), artist=int(p[1]), count=int(p[2])))
+		userArtistDF = sqlContext.createDataFrame(userArtists)
+		
+		userArtistDF.show()
+		bArtistAlias.show()
+		join = userArtistDF.join(bArtistAlias, userArtistDF['artist'] == bArtistAlias['artist'], 'inner')
+		# count = join.count()
+		# print(count)
+		return join
 
 
 
