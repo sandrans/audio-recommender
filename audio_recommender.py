@@ -92,7 +92,7 @@ class RunRecommender:
 
     print ("Aggregating...")
     # aggregation takes time
-    self.user_artist_df.agg(*exprs).show()
+    # self.user_artist_df.agg(*exprs).show()
 
     # parts = rawUserArtistData.map(lambda l: l.split())
     # userArtists = parts.map(lambda p: Row(user=int(p[0]), artist=int(p[1])))
@@ -114,9 +114,9 @@ class RunRecommender:
     # bad = artistByID.where(F.col("id").isin({"artist", "alias"}))
 
 
-  def model(self, sc, rawUserArtistData, rawArtistData, rawArtistAlias):
+  def buildModel(self, sc, rawUserArtistData, rawArtistData, rawArtistAlias):
     print("modeling ...")
-    bArtistAlias = sc.broadcast(self.buildArtistAlias(self.artist_alias))
+    bArtistAlias = sc.broadcast(self.artist_alias)
     # bArtistAlias = self.buildArtistAlias(rawArtistAlias)
 
     print("building counts ...")
@@ -187,9 +187,7 @@ class RunRecommender:
     # artistAlias = parts.map(lambda p: makeAliasRow(p))
     # artistAliasDF = sqlContext.createDataFrame(artistAlias)
 
-    artistAliasDF = rawArtistAlias.rdd\
-    .map(lambda row: alias_strip(row['value']))\
-    .filter(lambda x: x is not None).collectAsMap()
+    artistAliasDF = rawArtistAlias.rdd.map(lambda row: alias_strip(row['value'])).filter(lambda x: x is not None).collectAsMap()
 
     return artistAliasDF
 
@@ -217,7 +215,7 @@ class RunRecommender:
     # print(count)
 
     join = rawUserArtistData.rdd\
-        .map(lambda row: count_final_play(row['value'], bArtistAlias))\
+        .map(lambda row: count_final_plays(row['value'], bArtistAlias))\
         .toDF(('user', 'artist', 'count'))
 
     return join
@@ -243,8 +241,8 @@ if __name__ == '__main__':
   runRecommender = RunRecommender(context)
 
   runRecommender.preparation(rawUserArtistData, rawArtistData, rawArtistAlias)
-  runRecommender.model(sc, rawUserArtistData, rawArtistData, rawArtistAlias)
-  runRecommender.evaluate(rawUserArtistData, rawArtistAlias)
+  runRecommender.buildModel(sc, rawUserArtistData, rawArtistData, rawArtistAlias)
+  # runRecommender.evaluate(rawUserArtistData, rawArtistAlias)
   runRecommender.recommend(rawUserArtistData, rawArtistData, rawArtistAlias)
 
 
