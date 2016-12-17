@@ -1,10 +1,10 @@
 # AudioRecommender
 
-import pyspark
 from pyspark import SparkContext, SparkConf
 import re
 import sys
 from pyspark.sql import *
+from pyspark.sql import SQLContext
 from pyspark.sql import functions as F
 from pyspark.mllib.recommendation import *
 # from pyspark.sql.types import IntegerType
@@ -80,12 +80,10 @@ class RunRecommender:
 
   def preparation(self, rawUserArtistData, rawArtistData, rawArtistAlias):
     print("preparation...")
-    self.artist_by_id = self._build_artist_by_id(rawArtistData)
-    self.artist_alias = self._build_artist_alias(rawArtistAlias)
+    self.artist_by_id = self._buildArtistByID(rawArtistData)
+    self.artist_alias = self._buildArtistAlias(rawArtistAlias)
 
-    self.user_artist_df = rawUserArtistData.rdd\
-        .map(lambda row: [int(x) for x in row['value'].split()[:2]])\
-        .toDF(['user', 'artist'])
+    self.user_artist_df = rawUserArtistData.rdd.map(lambda row: [int(x) for x in row['value'].split()[:2]]).toDF(['user', 'artist'])
 
     # user and artist id aggregates
     cols = ['user', 'artist']
@@ -116,10 +114,11 @@ class RunRecommender:
     # bad = artistByID.where(F.col("id").isin({"artist", "alias"}))
 
 
-  def model(self, rawUserArtistData, rawArtistData, rawArtistAlias):
+  def model(self, sc, rawUserArtistData, rawArtistData, rawArtistAlias):
     print("modeling ...")
-    # bArtistAlias = sc.broadcast(self.buildArtistAlias(rawArtistAlias))
+    bArtistAlias = sc.broadcast(self.buildArtistAlias(self.artist_alias))
     # bArtistAlias = self.buildArtistAlias(rawArtistAlias)
+
     print("building counts ...")
     trainData = self._buildCounts(rawUserArtistData, bArtistAlias).cache()
     print("training data...")
@@ -143,23 +142,34 @@ class RunRecommender:
 
     # display artists listened by the user_id
     print ("This was listened by: ", user_id)
-    __artist_by_id = self.artist_by_id
-    __artist_by_id.filter(pysqlf.col('id').isin(artist_ids)).show()
+    _artist_by_id = self.artist_by_id
+    _artist_by_id.filter(pysqlf.col('id').isin(artist_ids)).show()
 
     train_data.rdd.unpersist()
 
   def evaluate(self, rawUserArtistData, rawArtistAlias):
     print("evaluate...")
 
-  def recommend(self, rawUserArtistData, rawArtistData, rawArtistAlias):
+  def recommend(self, user_id, number):
     print("recommend...")
+    # recommend N artist ids based on a specific user
+    top_recommendations = self.model.recommendProducts(user_id, number)
+
+    # reommend
+    rec_ids = list()
+    for rec in top_recommendations:
+        rec_ids.append(rec.product)
+        print (rec)
+
+    print ("Top {} Recs For {}".format(number, user_id))
+    #display names of recommended artists
+    self.artist_by_id.filter(F.col('id')\
+        .isin(rec_ids)).show()
 
   def _buildArtistByID(self, rawArtistData):
     print("buildArtistByID...")
 
-    artistByIdDF = rawArtistData.rdd\
-    .map(lambda row: artist_strip(row['value']))\
-    .filter(lambda x: x is not None).toDF(('id', 'name'))
+    artistByIdDF = rawArtistData.rdd.map(lambda row: artist_strip(row['value'])).filter(lambda x: x is not None).toDF(('id', 'name'))
 
     # parts = rawArtistData.map(lambda l: l.split('\t'))
     # # parts.foreach(p)
@@ -220,21 +230,20 @@ def count_final_plays(line, bad_artist_alias):
 if __name__ == '__main__':
 
   sc = SparkContext("local", "Audio Recommender App")
-
+  context = SQLContext(sparkContext=sc)
   # replace base eventually with s3 bucket url
   # base = ("s3://aws-logs-858798505425-us-east-1/audio_data/")
   base = "../profiledata_06-May-2005/"
 
-  rawUserArtistData = sc.textFile(base+"user_artist_data.txt").cache()
-  rawArtistData = sc.textFile(base+"artist_data.txt").cache()
-  rawArtistAlias = sc.textFile(base+"artist_alias.txt").cache()
+  rawUserArtistData = context.read.text(base+"user_artist_data.txt").cache()
+  rawArtistData = context.read.text(base+"artist_data.txt").cache()
+  rawArtistAlias = context.read.text(base+"artist_alias.txt").cache()
 
-  context = SQLContext(sparkContext=sc)
   # Make a new object of the RunRecommender class
   runRecommender = RunRecommender(context)
 
   runRecommender.preparation(rawUserArtistData, rawArtistData, rawArtistAlias)
-  runRecommender.model(rawUserArtistData, rawArtistData, rawArtistAlias)
+  runRecommender.model(sc, rawUserArtistData, rawArtistData, rawArtistAlias)
   runRecommender.evaluate(rawUserArtistData, rawArtistAlias)
   runRecommender.recommend(rawUserArtistData, rawArtistData, rawArtistAlias)
 
