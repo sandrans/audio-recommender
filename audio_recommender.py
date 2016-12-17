@@ -7,7 +7,7 @@ from pyspark.sql import *
 from pyspark.sql import SQLContext
 from pyspark.sql import functions as F
 from pyspark.mllib.recommendation import *
-# from pyspark.sql.types import IntegerType
+from pyspark.sql.types import IntegerType
 
 import numpy as np
 from numpy.random import rand
@@ -92,7 +92,7 @@ class RunRecommender:
 
     print ("Aggregating...")
     # aggregation takes time
-    # self.user_artist_df.agg(*exprs).show()
+    self.user_artist_df.agg(*exprs).show()
 
     # parts = rawUserArtistData.map(lambda l: l.split())
     # userArtists = parts.map(lambda p: Row(user=int(p[0]), artist=int(p[1])))
@@ -129,9 +129,9 @@ class RunRecommender:
 
     # artist id listened by user_id
     user_id = 2093760
-    artist_ids = train_data\
-    .filter(train_data.user == user_id)\
-    .select(train_data.artist.cast(IntegerType()))\
+    artist_ids = trainData\
+    .filter(trainData.user == user_id)\
+    .select(trainData.artist.cast(IntegerType()))\
     .distinct().collect()
 
     artist_ids.show()
@@ -145,7 +145,7 @@ class RunRecommender:
     _artist_by_id = self.artist_by_id
     _artist_by_id.filter(pysqlf.col('id').isin(artist_ids)).show()
 
-    train_data.rdd.unpersist()
+    trainData.rdd.unpersist()
 
   def evaluate(self, rawUserArtistData, rawArtistAlias):
     print("evaluate...")
@@ -162,7 +162,8 @@ class RunRecommender:
         print (rec)
 
     print ("Top {} Recs For {}".format(number, user_id))
-    #display names of recommended artists
+
+    # display names of recommended artists
     self.artist_by_id.filter(F.col('id')\
         .isin(rec_ids)).show()
 
@@ -226,12 +227,13 @@ def count_final_plays(line, bad_artist_alias):
     return (info[0], final_artist_id, info[2])
 
 if __name__ == '__main__':
-
-  sc = SparkContext("local", "Audio Recommender App")
+  config = SparkConf()
+  config.setAppName("AudioRecommenderApp")
+  sc = SparkContext(conf=config)
   context = SQLContext(sparkContext=sc)
   # replace base eventually with s3 bucket url
-  # base = ("s3://aws-logs-858798505425-us-east-1/audio_data/")
-  base = "../profiledata_06-May-2005/"
+  base = ("s3://aws-logs-640921844779-us-west-2/audio_data/")
+  # base = "../profiledata_06-May-2005/"
 
   rawUserArtistData = context.read.text(base+"user_artist_data.txt").cache()
   rawArtistData = context.read.text(base+"artist_data.txt").cache()
